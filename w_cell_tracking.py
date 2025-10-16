@@ -11,12 +11,7 @@
 
 # Import some shared libraries
 import os
-import dask.distributed as dd
-import dask
-import numpy as np
 import pandas as pd
-import xarray as xr
-import datetime as dt
 import tobac
 
 from shared_functions import get_xy_spacing, save_files
@@ -25,29 +20,12 @@ from shared_functions import get_xy_spacing, save_files
 ver = "V1"  # version of INCUS simulation dataset
 modelPath = f"/monsoon/MODEL/LES_MODEL_DATA/{ver}/"
 outPath = f"/monsoon/MODEL/LES_MODEL_DATA/Tracking/{ver}/"
-runs = [
-    "ARG1.1-R-V1",
-    "ARG1.2-R-V1",
-    "AUS1.1-R-V1",
-    "BRA1.1-R-V1",
-    "BRA2.1-R-V1",
-    "DRC1.1-R-V1",
-    "DRC1.1-RCR-V1",
-    "PHI1.1-R-V1",
-    "PHI2.1-R-V1",
-    "SAU1.1-R-V1",
-    "SIO1.1-R-V1",
-    "USA1.1-R-V1",
-    "USA3.1-R-V1",
-    "WPO1.1-R-V1",
-    "WPO1.1-RPR-V1",
-]  # which model runs to process
 # separately I created a pkl file that contains the number of x,y points for each of the simulations
 # having this as separate dataframe saves on some computational cost from re-calculating this
 # in every script
 outx = pd.read_pickle(f"/tempest/gleung/incustrack/nx.pkl")
 outy = pd.read_pickle(f"/tempest/gleung/incustrack/ny.pkl")
-
+runs = outx.index
 # tobac tracking parameters
 # see tobac documentation for more detailed description of each parameter
 params = {}
@@ -63,7 +41,7 @@ params["adaptive_stop"] = 1.0
 for run in runs:
     print(run)
     dataPath = f"{modelPath}/{run}/G3/out_30s/"
-    grid = "g3"
+
     for grid, dmax in zip(
         ["g1", "g2", "g3"], [4800, 2000, 800]
     ):  # based on 0.5th percentile of nearest neighbor distance
@@ -117,7 +95,8 @@ for run in runs:
                 out_tracks["lon"] = out_tracks["lon"].astype("float")
 
                 # select only cells where the cell is never outside the max/min horizontal locations
-                cells = out_tracks[["cell", "hdim_1", "hdim_2"]].groupby("cell")
+                cells = out_tracks[["cell", "hdim_1", "hdim_2"]].groupby(
+                    "cell")
 
                 out_tracks = out_tracks[
                     (

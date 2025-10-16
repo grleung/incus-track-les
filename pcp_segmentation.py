@@ -29,10 +29,10 @@ from shared_functions import (
 # Define the paths to INCUS data and where to save output
 ver = "V1"  # version of INCUS simulation dataset
 modelPath = f"/monsoon/MODEL/LES_MODEL_DATA/{ver}/"
-outPath = f"/monsoon/MODEL/LES_MODEL_DATA/Tracking/{ver}/"
-runs = ['USA1.1-R-V1','WPO1.1-R-V1']
-grids =['g3']
+outPath = f"/monsoon/MODEL/LES_MODEL_DATA/Tracking/{ver}-temp/"
 
+runs = ['DRC1.1-RCR-V1']
+grids = ["g3"]
 
 # parameters for segmentation
 params = {}
@@ -47,16 +47,21 @@ outbounds = pd.read_pickle(f"/tempest/gleung/incustrack/bounds.pkl")
 # loop through each of the runs
 for grid in grids:
     for run in runs:
-        dataPath = f"{modelPath}/{run}/G3/out_30s/"
-    
+        if 'BRA' in run:
+            dataPath = f"{modelPath}/{run}/G3/out_30s/lite/"
+        else:
+            dataPath = f"{modelPath}/{run}/G3/out_30s/"
+
         # list of all timesteps where lite files are found in relevant folder
         all_paths = [
             p.split("/")[-1][:-6]
             for p in sorted(glob.glob(f"{dataPath}/a-L-*-g3.h5"))
         ]
-        
+
         dxy = get_xy_spacing(grid)
-        trackPath = f"{outPath}/{run}/{grid}/combined_w_cond_segmented_tracks.pq"
+        trackPath = (
+            f"{outPath}/{run}/{grid}/combined_w_cond_segmented_tracks.pq"
+        )
         tracks = pd.read_parquet(trackPath)
 
         savemaskPath = f"{outPath}/{run}/{grid}/pcp_masks/"

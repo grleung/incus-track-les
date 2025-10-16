@@ -39,6 +39,22 @@ else:
         all_df, renumber_features=renum_flag, sort_features_by="frame"
     )
 
+if ("qc_tracks" in savePath) or ("qc_family" in savePath):
+    run = dataPaths[0].split("/")[-3]
+    grid = dataPaths[0].split("/")[-2]
+    track = pd.read_parquet(
+        f"/monsoon/MODEL/LES_MODEL_DATA/Tracking/V1/{run}/{grid}/combined_w_cond_segmented_tracks.pq"
+    )
+
+    if sorted(track.feature.values) != sorted(all_df.feature.values):
+        track = track.set_index(["cell", "time"])
+
+        all_df = all_df.set_index(["cell", "time"])
+
+        all_df["feature"] = all_df.index.map(track.feature)
+
+        all_df = all_df.reset_index()
+
 save_files(all_df, savePath)
 
 print(

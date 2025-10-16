@@ -1,4 +1,10 @@
 # Import some shared libraries
+from shared_functions import (
+    get_rams_output,
+    get_xy_spacing,
+    compute_cond,
+    save_files,
+)
 import os
 import sys
 from dask.distributed import Client
@@ -10,36 +16,35 @@ import tobac
 import glob
 from dask_memusage import install
 
+# g3 : 6 cores, 2 proc, 360 GB
+
 # spin up SLURM cluster
 cluster = SLURMCluster(
-    cores=4,
-    processes=4,
-    memory="950GB",
+    cores=24,
+    processes=24,
+    memory="200GB",
     account="incus",
-    walltime="48:00:00",
+    walltime="56:00:00",
     scheduler_options={"dashboard_address": f":{sys.argv[1]}"},
-    job_extra_directives=["--partition=all", "--job-name=tobac-cond-segmentation"],
+    job_extra_directives=[
+        "--partition=all",
+        "--job-name=tobac-cond-segmentation",
+    ],
 )
 client = Client(cluster)
-cluster.scale(jobs=3)
+cluster.scale(jobs=5)
 
-install(cluster.scheduler, "/home/gleung/memusage-condseg-new.csv")
+install(cluster.scheduler, "/home/gleung/memusage-condseg2-08.csv")
 
 client.upload_file("shared_functions.py")
 
-from shared_functions import (
-    get_rams_output,
-    get_xy_spacing,
-    compute_cond,
-    save_files,
-)
 
 # Define the paths to INCUS data and where to save output
 ver = "V1"  # version of INCUS simulation datasetls /m
 modelPath = f"/monsoon/MODEL/LES_MODEL_DATA/{ver}/"
 outPath = f"/monsoon/MODEL/LES_MODEL_DATA/Tracking/{ver}/"
 runs = sys.argv[2:]
-grids = ["g3"]
+grids = ["g2"]
 
 # parameters for segmentation
 params = {}
@@ -51,7 +56,9 @@ params["seed_3D_size"] = (15, 5, 5)
 
 
 def dask_segmentation(path, run, grid, outPath, params):
-    xybounds = pd.read_parquet("/tempest/gleung/incustrack/xybounds.pq").loc[run,grid]
+    xybounds = pd.read_parquet("/tempest/gleung/incustrack/xybounds.pq").loc[
+        run, grid
+    ]
 
     dxy = get_xy_spacing(grid)
 
@@ -59,7 +66,7 @@ def dask_segmentation(path, run, grid, outPath, params):
 
     time = pd.to_datetime(path.split("/")[-1][4:])
 
-    if grid == 'g3':
+    if grid == "g3":
         subset = False
         subsetxy = False
     else:
@@ -73,8 +80,8 @@ def dask_segmentation(path, run, grid, outPath, params):
         subset=True,
         subsetxy=True,
         coords=True,
-    ) 
-    
+    )
+
     ds = compute_cond(ds)
 
     ds = ds.expand_dims({"time": [time]})
@@ -94,9 +101,8 @@ def dask_segmentation(path, run, grid, outPath, params):
 
     del mask
     del ds
-    
-    return seg
 
+    return seg
 
 
 # loop through each of the runs
@@ -150,7 +156,7 @@ for grid in grids:
                     grid=grid,
                     outPath=outPath,
                     params=params,
-                    batch_size=1
+                    batch_size=1,
                 )
 
                 out = client.gather(out)

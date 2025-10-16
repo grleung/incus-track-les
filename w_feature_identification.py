@@ -11,6 +11,11 @@
 # For questions, contact Bee (gabrielle.leung@colostate.edu)
 
 # Import some shared libraries
+from shared_functions import (
+    get_rams_output,
+    get_xy_spacing,
+    save_files,
+)
 import os
 import dask.distributed as dd
 from dask_jobqueue import SLURMCluster
@@ -21,11 +26,15 @@ import tobac
 import glob
 import sys
 
+# typical vlaues: g1 :: 20 cores, 50GB mem
+# g2 :
+# g3 10 cores, 200GB mem
+
 # spin up SLURM cluster
 cluster = SLURMCluster(
-    cores=15,
-    processes=15,
-    memory="400GB",
+    cores=6,
+    processes=6,
+    memory="300GB",
     account="incus",
     walltime="56:00:00",
     scheduler_options={"dashboard_address": f":{sys.argv[1]}"},
@@ -40,11 +49,6 @@ cluster.scale(jobs=1)
 client = dd.Client(cluster)
 
 client.upload_file("shared_functions.py")
-from shared_functions import (
-    get_rams_output,
-    get_xy_spacing,
-    save_files,
-)
 
 # Define the paths to INCUS data and where to save output
 ver = "V1"  # version of INCUS simulation dataset
@@ -58,7 +62,7 @@ grids = ["g3"]
 # separately I created a pkl file that contains the min/max lat/lon for each of the simulations
 # having this as separate dataframe saves on some computational cost from re-calculating this
 # in every script
-xybounds = pd.read_pickle(f"/tempest/gleung/incustrack/xybounds.pkl")
+xybounds = pd.read_parquet(f"/tempest/gleung/incustrack/xybounds.pq")
 
 # tobac feature identification parameters
 # see tobac documentation for more detailed description
@@ -104,6 +108,7 @@ for run in runs:
                 savedfPath = f"{outPath}/{run}/{grid}/w_features.pq"
 
             if not os.path.exists(savedfPath):
+                print(i)
 
                 # batch size is how may batches to submit the tasks in the list [paths] to scheduler
                 if grid == "g3":
