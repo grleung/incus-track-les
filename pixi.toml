@@ -1,0 +1,26 @@
+[workspace]
+authors = ["grleung <bee.leung@wisc.edu>"]
+channels = ["conda-forge"]
+name = "incus-track-les"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+xarray = "*"
+numpy = "*"
+pandas= "<3"
+dask = "*"
+netcdf4 = "*"
+h5netcdf= "*"
+hdf5plugin = "*"
+palettable = "*"
+matplotlib=  "*"
+cartopy = "*"
+metpy = "*"
+flox = "*"
+
+[pypi-dependencies]
+# points to Sean's tobac families PR
+tobac = { git = "https://github.com/tobac-project/tobac.git", rev = "refs/pull/551/head"}

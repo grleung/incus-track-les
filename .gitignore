@@ -138,4 +138,6 @@ dmypy.json
 .pyre/
 
 #jug
-*.jugdata/
+*.jugdata/# pixi environments
+.pixi/*
+!.pixi/config.toml
