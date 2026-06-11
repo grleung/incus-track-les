@@ -20,7 +20,10 @@ matplotlib=  "*"
 cartopy = "*"
 metpy = "*"
 flox = "*"
+ipykernel = ">=7.3.0,<8"
+numba = ">=0.65.1,<0.66"
 
 [pypi-dependencies]
 # points to Sean's tobac families PR
-tobac = { git = "https://github.com/tobac-project/tobac.git", rev = "refs/pull/551/head"}
+tobac = { url = "https://github.com/tobac-project/tobac/archive/refs/pull/551/head.zip" }
+incus_track_les = { path = ".", editable = true }
