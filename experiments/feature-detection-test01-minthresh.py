@@ -1,5 +1,4 @@
-'This script tests the number and spacing of thresholds for feature detection'
-
+'This script tests the minimum vertical velocity threshold for feature detection.'
 import gc
 import os
 import tobac
@@ -11,20 +10,12 @@ import numpy as np
 batch_size = 30
 
 # initialize experiments for this test
-test_name = 'test02-numthresh'
-min_thresh = 1
-max_thresh = 49
-grid_level = 3
+test_name = 'test01-minthresh'
 
 parameter_experiments = {}
 
-for i, thresh in enumerate([np.arange(min_thresh, max_thresh+2, 2),
-               np.arange(min_thresh, max_thresh+3, 3),
-               np.arange(min_thresh, max_thresh+6, 6),
-               np.geomspace(min_thresh, max_thresh,25),
-               np.geomspace(min_thresh, max_thresh,15),
-               np.geomspace(min_thresh, max_thresh,10),
-               ]):
+
+for i, thresh in enumerate([1,1.5,2,2.5,3,3.5,4,4.5,5]):
     experiment_name = f"v{str(i+6).zfill(2)}"
 
     params = {"position_threshold": "weighted_diff",
@@ -32,31 +23,18 @@ for i, thresh in enumerate([np.arange(min_thresh, max_thresh+2, 2),
               "n_erosion_threshold": 0,
               "n_min_threshold": 64,
               "target": "maximum",
-              "threshold": thresh.tolist(),
+              "threshold": [thresh],
               'vertical_coord':'altitude_stag'
               }
 
     parameter_experiments[experiment_name] = params
 
-# keep default tracking parameters
-tracking_params = {"extrapolate": 0,
-                   "order": 1,
-                   "memory": 0,
-                   "time_cell_min": 4*30, # time in s
-                   "method_linking": "predict",
-                   "d_max": 800,
-                   'vertical_coord':'altitude_stag'
-}
-
-
 if __name__ == '__main__':
     client = init_slurm_downdraft(jobs=batch_size, job_name=test_name)
-
     for domain in ['ARG1.1','WPO1.1']:
         for model in ['R','WM','WT']:
             run = f"{domain}-{model}-V1"
             print(f"Starting run: {run}")
-
             experiment_dir = Path(f'/tempest/gleung/incus-les-track-tests/{test_name}/{run}')
 
             # Check which experiments are missing for this run
@@ -69,8 +47,8 @@ if __name__ == '__main__':
             }
 
             if run_parameters:
-
-                filepaths = get_filepaths(Path(MODEL_DATA_DIR,run),
+    
+                filepath  = get_filepaths(Path(MODEL_DATA_DIR,run),
                                           grid_level=grid_level)
                 filepaths = filepaths[60:90] # subset 15 min period to save computation
 
@@ -86,9 +64,9 @@ if __name__ == '__main__':
                 experiment_features = {experiment_name: [] for experiment_name in run_parameters.keys()}
 
                 for filepath_batch in filepath_batches:
-                    futures = client.map(run_feature_detection_timestep, 
-                                        filepath_batch, 
-                                        coords=coords, 
+                    futures = client.map(feature_detection_timestep,
+                                          filepath_batch,
+                                          coords=coords,
                                         parameters = run_parameters)
                             
                     batch_results = client.gather(futures)
@@ -102,7 +80,7 @@ if __name__ == '__main__':
                     del futures, batch_results
                     gc.collect()
                     client.run(gc.collect)
-
+                    
                 # save feature output from all batches and experiments!
                 save_feature_output(experiment_features, 
                             save_dir = experiment_dir)
@@ -121,7 +99,4 @@ if __name__ == '__main__':
             save_track_output(tracks, 
                               save_dir = experiment_dir, 
                         experiment_name=experiment_names)
-            
-
-
 

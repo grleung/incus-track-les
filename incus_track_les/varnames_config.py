@@ -74,7 +74,7 @@ DIMS = {
     },
 }
 
-GRID_SPACING_MAPPING = {
+GRID_SPACING_MAPPINGS = {
     1: 1600.0,  # Grid 1 spacing 
     2: 400.0,   # Grid 2 spacing
     3: 100.0,   # Grid 3 spacing
