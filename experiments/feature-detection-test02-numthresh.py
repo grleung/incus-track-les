@@ -13,6 +13,9 @@ from dask_jobqueue import SLURMCluster
 from dask.distributed import Client
 
 batch_size = 30
+test_name = 'test02-numthresh'
+
+
 
 # spin up SLURM cluster
 cluster = SLURMCluster(
@@ -41,19 +44,8 @@ print("Waiting for Dask workers to spin up via SLURM...")
 client.wait_for_workers(n_workers=1, timeout=2700) # 45-minute timeout window so that scheduler doesn't quit right away if worker jobs don't get picked up
 print("Workers connected! Proceeding to tracking...")
 
-# --- DYNAMIC BATCH SIZE ADAPTATION ---
-# Query the live scheduler to see how many workers are currently registered
-num_workers = len(client.scheduler_info()['workers'])
-print(f"Connected to {num_workers} SLURM worker(s).")
-
-# If workers spun up, cap the batch size to the worker count; otherwise, fallback to 1 
-batch_size = 30#max(1, num_workers)
-print(f"Setting processing batch_size to: {batch_size}")
-
 min_thresh = 1
 max_thresh = 49
-
-test_name = 'test02-numthresh'
 
 parameter_experiments = {}
 
@@ -72,7 +64,6 @@ for i, thresh in enumerate([np.arange(min_thresh, max_thresh+2, 2),
               "n_min_threshold": 64,
               "target": "maximum",
               "threshold": thresh.tolist(),
-              'dxy':100,
               'vertical_coord':'altitude_stag'
               }
 
