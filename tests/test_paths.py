@@ -4,9 +4,7 @@ import pytest
 import pandas as pd
 from pathlib import Path
 
-from incus_track_les.paths import (
-    find_grid_level_from_file_path,
-    find_time_from_file_path,
+from incus_track_les.paths import (find_model_metadata,
     find_run_name_from_file_path
 )
 
@@ -20,12 +18,12 @@ def test_rams_path_parsing():
     )
     
     run_name = find_run_name_from_file_path(rams_path)
-    grid_level = find_grid_level_from_file_path(rams_path)
-    timestamp = find_time_from_file_path(rams_path)
+    meta = find_model_metadata(rams_path)
 
     assert run_name == "WPO1.1-R-V1"
-    assert grid_level == 3
-    assert timestamp == pd.Timestamp("2018-08-28 04:00:00")
+    assert meta['model_type'] == 'RAMS'
+    assert meta['grid_level'] == 3
+    assert meta['time'] == pd.Timestamp("2018-08-28 04:00:00")
 
 
 def test_wrf_path_parsing():
@@ -37,9 +35,9 @@ def test_wrf_path_parsing():
     )
     
     run_name = find_run_name_from_file_path(wrf_path)
-    grid_level = find_grid_level_from_file_path(wrf_path)
-    timestamp = find_time_from_file_path(wrf_path)
+    meta = find_model_metadata(wrf_path)
     
     assert run_name == "WPO1.1-WM-V1"
-    assert grid_level == 3
-    assert timestamp == pd.Timestamp("2018-08-28 04:00:00")
+    assert meta['model_type'] == 'WRF'
+    assert meta['grid_level'] == 3
+    assert meta['time'] == pd.Timestamp("2018-08-28 04:00:00")

@@ -1,0 +1,39 @@
+font.family:sans-serif
+font.sans-serif:Futura
+font.stretch:semi-expanded
+font.size:12
+
+xtick.color: black
+ytick.color: black
+
+lines.color: black
+lines.linewidth: 2.5
+
+axes.facecolor: white
+axes.linewidth:0.8
+axes.titleweight: 500
+axes.titlelocation:left
+axes.titlesize:18
+axes.edgecolor:black
+axes.labelcolor:black
+axes.spines.left:True
+axes.spines.bottom:True
+axes.spines.right:True
+axes.spines.top:True
+
+axes.prop_cycle: cycler('color', ['bb5845', '325d82', 'daa63a', '3b7951', '67436d'])
+
+figure.figsize:6,4
+figure.dpi:300
+figure.facecolor:white
+figure.subplot.top:0.95
+figure.subplot.bottom:0.05
+figure.subplot.left:0.05
+figure.subplot.right:0.95
+figure.autolayout:True
+
+legend.fontsize:12
+legend.frameon: False
+legend.numpoints:1
+
+text.color:black

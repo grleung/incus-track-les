@@ -4,7 +4,6 @@ from pathlib import Path
 import pandas as pd
 
 MODEL_DATA_DIR = Path('/monsoon/MODEL/LES_MODEL_DATA/V1')
-
 TRACK_DIR = Path ('/monsoon/MODEL/LES_MODEL_DATA/Tracking/V1.2')
 
 def find_run_name_from_file_path(path: Path) -> str:
@@ -21,44 +20,26 @@ def find_run_name_from_file_path(path: Path) -> str:
     # since RAMS and WRF have different file structures, note that the run name is always after the 'V1' in file path
     return(path_parts[path_parts.index("V1") + 1])
 
-
-def find_grid_level_from_file_path(path: Path) -> int:
-    """Returns the grid level for given path
-
-    Args:
-        path (Path): path to either RAMS or WRF output file
-
-    Returns:
-        int: integer corresponding to grid level
-    """
-
-    from . import find_run_name_from_file_path
-
-    run_name = find_run_name_from_file_path(path)
-
-    if "-R-" in run_name:
-        return(int(path.name[-4:-3]))
-    elif '-WM-' in run_name or '-WT-' in run_name:
-        return(int(path.name[9:10]))
-    
-
-def find_time_from_file_path(path: Path) -> pd.Timestamp:
-    """Returns the UTC time for given path
+def find_model_metadata(path: Path) -> dict:
+    """Returns model metadata for given path
 
     Args:
         path (Path): path to either RAMS or WRF output file
 
     Returns:
-        pd.Timestamp: timestamp with file time
+        dict: dictionary containing model type, grid level, and time for specified path
     """
-
-    #from . import find_run_name_from_file_path
-
     run_name = find_run_name_from_file_path(path)
+    filename = path.name
 
-    if "-R-" in run_name:
-        return(pd.to_datetime(path.name[4:-6]))
-    elif '-WM-' in run_name or '-WT-' in run_name:
-        return(pd.to_datetime(path.name[11:],format='%Y-%m-%d_%H_%M_%S'))
-    
+    if '-R-' in run_name:
+        return({'model_type':'RAMS',
+                'grid_level': int(filename[-4:-3]),
+                'time':pd.to_datetime(filename[4:-6])})
+    elif ('-WM-' in run_name) or ('-WT-' in run_name):
+        return({'model_type':'WRF',
+                'grid_level': int(filename[9:10]),
+                'time':pd.to_datetime(filename[11:],format='%Y-%m-%d_%H_%M_%S')})
+    else:
+        raise ValueError(f"Unknown model type for run name: {run_name}.")
     

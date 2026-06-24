@@ -1,4 +1,4 @@
-# incus_track_les/data_io.py
+# incus_track_les/data_readers.py
 
 from __future__ import annotations  
 from pathlib import Path
@@ -6,67 +6,8 @@ from typing import List, Union
 import numpy as np
 import xarray as xr
 
-from incus_track_les.paths import find_grid_level_from_file_path, find_time_from_file_path
-
-RENAMED_RAMS_DIMS = {
-    "phony_dim_3": "z",
-    "phony_dim_1": "y",
-    "phony_dim_2": "x",
-}
-
-RENAMED_WRF_DIMS = {
-    'west_east': 'x',
-    'south_north': 'y',
-    'bottom_top': 'z',
-    'west_east_stag': 'x_stag',
-    'south_north_stag': 'y_stag',
-    'bottom_top_stag': 'z_stag'
-}
-
-DIMS = {
-    'x': {
-        'short_name': 'xdist', 
-        'rams_header_name': '__xtn', 
-        'long_name': 'E-W distance', 
-        'standard_name': 'projection_x_coordinate', 
-        'units': 'meters'
-    },
-    'y': {
-        'short_name': 'ydist', 
-        'rams_header_name': '__ytn', 
-        'long_name': 'N-S distance', 
-        'standard_name': 'projection_y_coordinate',  
-        'units': 'meters'
-    },
-    'z': {
-        'short_name': 'altitude', 
-        'rams_header_name': '__ztn', 
-        'long_name': 'altitude above ground level', 
-        'standard_name': 'altitude', 
-        'units': 'meters'
-    },
-    'x_stag': {
-        'short_name': 'xdist_stag', 
-        'rams_header_name': '__xmn', 
-        'long_name': 'E-W distance', 
-        'standard_name': 'projection_x_coordinate', 
-        'units': 'meters'
-    },
-    'y_stag': {
-        'short_name': 'ydist_stag', 
-        'rams_header_name': '__ymn', 
-        'long_name': 'N-S distance', 
-        'standard_name': 'projection_y_coordinate', 
-        'units': 'meters'
-    },
-    'z_stag': {
-        'short_name': 'altitude_stag', 
-        'rams_header_name': '__zmn', 
-        'long_name': 'altitude above ground level', 
-        'standard_name': 'altitude', 
-        'units': 'meters'
-    },
-}
+from incus_track_les.paths import find_model_metadata
+from incus_track_les.varnames_config import DIM_MAPPINGS, VAR_MAPPINGS, DIMS, GRID_SPACING_MAPPINGS
 
 def get_filepaths(directory: Path,grid_level: int=3) -> List[Path]:
     """Returns a sorted list of filepaths for a given run directory. Detects whether the simulation is RAMS or WRF. 
@@ -138,12 +79,15 @@ def read_rams_coords(path:Path) -> dict:
     Returns:
         dict: coordinate dictionary
     """    
+
+    meta = find_model_metadata(path) 
+
     # get grid number
-    grid_level = find_grid_level_from_file_path(path)
+    grid_level = meta['grid_level']
 
     # get the spatial size of each dimension
     with xr.open_dataset(path, engine='h5netcdf', phony_dims='access') as ds:
-        dim_lengths = {v: ds.sizes.get(k) for k, v in RENAMED_RAMS_DIMS.items()}
+        dim_lengths = {v: ds.sizes.get(k) for k, v in DIM_MAPPINGS[meta['model_type']].items()}
 
         # read lat/lon grid once
         lat = ds['GLAT'].values
@@ -154,10 +98,10 @@ def read_rams_coords(path:Path) -> dict:
                         'z_stag':dim_lengths['z']})
     
     coords = {}
-    for dim_name, meta in DIMS.items():
+    for dim_name, dim_meta in DIMS.items():
         length = dim_lengths[dim_name]
-        short_name = meta['short_name']
-        header_name = meta['rams_header_name']
+        short_name = dim_meta['short_name']
+        header_name = dim_meta['rams_header_name']
         
         # assign grid index range
         coords[dim_name] = range(length)
@@ -171,9 +115,9 @@ def read_rams_coords(path:Path) -> dict:
             dim_name, 
             header_data, 
             {
-                'units': meta['units'], 
-                'long_name': meta['long_name'],
-                'standard_name': meta['standard_name']
+                'units': dim_meta['units'], 
+                'long_name': dim_meta['long_name'],
+                'standard_name': dim_meta['standard_name']
             }
         )
         
@@ -193,16 +137,17 @@ def read_rams_coords(path:Path) -> dict:
 
     return(coords)
 
-def read_rams_data(path:Path, coords:dict, variables:list[str]=['WP'])->Union[xr.Dataset,xr.DataArray]:
+def read_rams_data(path:Path, variables:list[str])->Union[xr.Dataset,xr.DataArray]:
     """Read RAMS data into a standard format that can be read by tobac
 
     Args:
         path (Path): full path to file
-        coords (dict): coordinate dictionary from read_rams_coords
-        variables (list[str], optional): list of variables to return, see: RAMS documentation for variables available. Defaults to ['WP'].
+        variables (list[str], optional): list of variables to return, see: RAMS documentation for variables available.
     Returns:
         Union[xr.Dataset,xr.DataArray]: dataset or dataarray with RAMS data
-    """    
+    """
+
+    meta = find_model_metadata(path)    
 
     ds = xr.open_dataset(path,
                          chunks=-1, # don't chunk so dask task graph stays managable; tobac uses the whole grid at once anyway
@@ -212,40 +157,39 @@ def read_rams_data(path:Path, coords:dict, variables:list[str]=['WP'])->Union[xr
     # select only the variables we need
     ds = ds[variables]
 
-    
     # rename dimensions
-    ds = ds.rename_dims(RENAMED_RAMS_DIMS)
+    ds = ds.rename_dims(DIM_MAPPINGS[meta['model_type']])
 
     # rename the staggered variables manually
     # note that in the Arakawa-C grid, W is staggered in vertical but V and U are on same level as the scalar variables (and same for x and y directions)
     for var in variables:
-        if var in ["WP"]:  #note: in RAMS, WP is the vertical velocity at this timestep (WC says "current" in docs but this is actually the unfiltered future value for next time step initial conditions; see the Subroutine predict for details)
+        if var in ["WP"]:  
             ds[var] = ds[var].rename({"z": "z_stag"})
         elif var in ["VP"]:
             ds[var] = ds[var].rename({"y": "y_stag"})
         elif var in ["UP"]:
             ds[var] = ds[var].rename({"x": "x_stag"})
-
-    ds = ds.assign_coords(coords)
-
-    # if only one variable, just return the dataarray
-    if len(variables)==1:
-        ds = ds[variables[0]]
-
-    # last let's add time information
-    time = find_time_from_file_path(path)
-    ds = ds.expand_dims(time=[time])
-
+    
     return(ds)
 
-
-
 def read_wrf_coords(path:Path) -> dict:
+    """Returns a dictionary with WRF x,y,z coordinates in index units and physical units
+    and latitude/longitude. This only needs to be run once per run/grid (not every timestep) 
+
+    Args:
+        path (Path): full path to file
+
+    Returns:
+        dict: coordinate dictionary
+    """    
+
     import h5netcdf
+    
+    meta = find_model_metadata(path) 
     
     with h5netcdf.File(path, 'r') as f: # using this is faster than xarray bc of attributes I think?
         # get dimension sizes
-        dim_lengths = {v: f.dimensions[k].size for k, v in RENAMED_WRF_DIMS.items()}
+        dim_lengths = {v: f.dimensions[k].size for k, v in DIM_MAPPINGS[meta['model_type']].items()}
 
         # get grid size
         dx = f.attrs['DX']
@@ -257,7 +201,7 @@ def read_wrf_coords(path:Path) -> dict:
         # TODO: test this decision point: WRF uses fixed mass grid, such that the physical altitude changes with time
         # I think we can just take the base state geopoptential at center of domain at first timestep
         # and subtract surface altitude; initial test show this doesnt vary hugely within domains
-        # but for some reason physical altitudes end up being much bigger than RAMS (e.g., max alt reaches 33km while in RAMS only ~26km)
+
         # compute physical altitude from geopotential
 
         phb = f['PHB'][0,:,dim_lengths['y']//2,dim_lengths['x']//2]
@@ -267,9 +211,9 @@ def read_wrf_coords(path:Path) -> dict:
         altitude = 0.5 * (altitude_stag[:-1] + altitude_stag[1:])
 
     coords = {}
-    for dim_name, meta in DIMS.items():
+    for dim_name, dim_meta in DIMS.items():
         length = dim_lengths[dim_name]
-        short_name = meta['short_name']
+        short_name = dim_meta['short_name']
 
         # assign grid index range
         coords[dim_name] = np.arange(length)
@@ -280,11 +224,11 @@ def read_wrf_coords(path:Path) -> dict:
                 # note dx and dy are equal for these simulations
                 coords[short_name] = (
                     dim_name, 
-                    np.arange(length)* dx, #TODO: check grid stagger is right
+                    np.arange(length)* dx, 
                     {
-                        'units': meta['units'], 
-                        'long_name': meta['long_name'],
-                        'standard_name': meta['standard_name']
+                        'units': dim_meta['units'], 
+                        'long_name': dim_meta['long_name'],
+                        'standard_name': dim_meta['standard_name']
                     }
                 )
             else:
@@ -292,9 +236,9 @@ def read_wrf_coords(path:Path) -> dict:
                     dim_name, 
                     altitude_stag, 
                     {
-                        'units': meta['units'], 
-                        'long_name': meta['long_name'],
-                        'standard_name': meta['standard_name']
+                        'units': dim_meta['units'], 
+                        'long_name': dim_meta['long_name'],
+                        'standard_name': dim_meta['standard_name']
                     }
                 )
         else:
@@ -304,9 +248,9 @@ def read_wrf_coords(path:Path) -> dict:
                     dim_name, 
                     (np.arange(length)+0.5)* dx, 
                     {
-                        'units': meta['units'], 
-                        'long_name': meta['long_name'],
-                        'standard_name': meta['standard_name']
+                        'units': dim_meta['units'], 
+                        'long_name': dim_meta['long_name'],
+                        'standard_name': dim_meta['standard_name']
                     }
                 )
             else:
@@ -314,9 +258,9 @@ def read_wrf_coords(path:Path) -> dict:
                     dim_name, 
                     altitude, 
                     {
-                        'units': meta['units'], 
-                        'long_name': meta['long_name'],
-                        'standard_name': meta['standard_name']
+                        'units': dim_meta['units'], 
+                        'long_name': dim_meta['long_name'],
+                        'standard_name': dim_meta['standard_name']
                     }
                 )
     # add lat/lon to coords lat
@@ -335,17 +279,16 @@ def read_wrf_coords(path:Path) -> dict:
 
     
     
-
-def read_wrf_data(path:Path, coords:dict, variables:list[str]=['W'])->Union[xr.Dataset,xr.DataArray]:
+def read_wrf_data(path:Path, variables:list[str])->Union[xr.Dataset,xr.DataArray]:
     """Read WRF data into a standard format that can be read by tobac
 
     Args:
         path (Path): full path to file
-        coords (dict): coordinate dictionary from read_wrf_coords
-        variables (list[str], optional): list of variables to return, see WRF documentation. Defaults to ['W'].
+        variables (list[str], optional): list of variables to return, see WRF documentation.
     Returns:
         Union[xr.Dataset,xr.DataArray]: dataset or dataarray with WRF data
-    """    
+    """   
+    meta = find_model_metadata(path) 
     ds = xr.open_dataset(path,
                          chunks=-1, # don't chunk so dask task graph stays managable; tobac uses the whole grid at once anyway
                          engine='h5netcdf',
@@ -364,22 +307,59 @@ def read_wrf_data(path:Path, coords:dict, variables:list[str]=['W'])->Union[xr.D
         ds = ds.squeeze('Time')
 
     # rename dimensions
-    ds = ds.rename_dims({k: v for k, v in RENAMED_WRF_DIMS.items() if k in ds.dims})
+    ds = ds.rename_dims({k: v for k, v in DIM_MAPPINGS[meta['model_type']].items() if k in ds.dims})
 
+    return(ds)
+
+def read_coords(filepath: Path) -> dict:
+    meta = find_model_metadata(filepath)
+
+    if meta['model_type'] == 'RAMS':
+        return(read_rams_coords(filepath))
+    elif meta['model_type'] == 'WRF':
+        return(read_wrf_coords(filepath))
+    
+def read_data(filepath: Path, coords: Union[xr.Dataset,xr.DataArray], variables: list[str]) -> Union[xr.Dataset,xr.DataArray]:
+    meta = find_model_metadata(filepath)
+    model = meta['model_type']
+
+    vars = VAR_MAPPINGS[model]
+    variables_model_name = [vars.get(v,v) for v in variables] # list of requested variables with model-specific naming conventions
+
+    if model == 'RAMS':
+        ds = read_rams_data(filepath, variables=variables_model_name)
+    elif model == 'WRF':
+        ds = read_wrf_data(filepath, variables=variables_model_name)
+    else:
+        raise ValueError(f"Unrecognized model type for {filepath}: {model}")
+
+    # assign coordinates
     ds = ds.assign_coords(coords)
+    
+    # rename the RAMS/WRF internal variable names to unified descriptive names
+    rename_target = {
+        vars[v]: v 
+        for v in variables 
+        if v in vars
+    }
+    # whether file is RAMS or WRF, return the same variable names
+    if isinstance(ds, xr.Dataset):
+        ds = ds.rename(rename_target)
+    elif isinstance(ds, xr.DataArray):
+        if ds.name in rename_target:
+            ds = ds.rename(rename_target[ds.name])
 
     # if only one variable, just return the dataarray
     if len(variables)==1:
         ds = ds[variables[0]]
-    
+
     # last let's add time information
-    time = find_time_from_file_path(path)
+    time = meta['time']
     ds = ds.expand_dims(time=[time])
 
     return(ds)
-
-
-def subset_data(ds: xr.DataArray, nbound:int = 25):
+    
+def subset_data(ds: xr.DataArray, nbound:int = 25) -> xr.DataArray:
     """Subsets model data by removing sponge zone. on G3, 25 points around the boundary are being nudged towards G2 input, so we should remove them to only analyze interior of domain.
 
     Args:
@@ -393,3 +373,6 @@ def subset_data(ds: xr.DataArray, nbound:int = 25):
 
 
     return(ds)
+
+def find_dxy_from_grid_level(grid_level):
+    return(GRID_SPACING_MAPPINGS.get(grid_level))
