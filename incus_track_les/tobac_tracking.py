@@ -5,6 +5,7 @@ import pandas as pd
 import tobac
 import datetime as dt
 import numpy as np
+import xarray as xr
 
 from incus_track_les import read_data, subset_data, find_model_metadata
 from incus_track_les.data_readers import find_dxy_from_grid_level
@@ -63,11 +64,11 @@ def run_segmentation_timestep(filepath: Path, trackspath: Path, maskspath: Path,
 
     time = meta['time']
 
-    data = read_data(filepath, coords=coords, variables=['vertical_velocity','cloud_condensate'])
+    data = read_data(filepath, coords=coords, variables=['vertical_velocity','cloud_condensate']).isel(z_stag=slice(0, -1))
 
     print('data read done', flush=True)
 
-    data = subset_data(data)
+    data = subset_data(data).load() # test loading into memory from beginning?
 
     tracks = pd.read_parquet(trackspath)
     tracks = tracks[tracks.time==time]
@@ -92,6 +93,8 @@ def run_segmentation_timestep(filepath: Path, trackspath: Path, maskspath: Path,
                                                                            return_grid=True, 
                                                                            family_column_name='cloud_feature_id')
         
+        cloud_masks = cloud_masks.rename({'z':'z_stag'})
+        
         output_features[experiment_name] = {'cloud_families': cloud_fam}
 
         print('cloud mask done', flush=True)
@@ -101,19 +104,23 @@ def run_segmentation_timestep(filepath: Path, trackspath: Path, maskspath: Path,
                                                                      data.vertical_velocity,
                                                                      dxy=dxy,
                                                                      **experiment_params['thermal_segmentation_params'],
-                                                                     statistic=statistics)
-        output_features[experiment_name]['thermal_features'] = thermal_fts        
+                                                                     #statistic=statistics
+                                                                     )   
 
 
         print('thermal segmentation done', flush=True)
 
         # third, check for overlap between thermal mask and cloud mask, discarding any thermal features which do not overlap with cloud mask
 
-        overlap_masks = (thermal_masks > 0) & (cloud_masks > 0)
-        thermal_fts_keep = np.unique(thermal_masks.where(overlap_masks).compute())
+        overlap_masks = (thermal_masks>0) & (cloud_masks>0)
+        thermal_fts_keep = np.unique(thermal_masks.where(overlap_masks, 0))
         thermal_fts_keep = thermal_fts_keep[~np.isnan(thermal_fts_keep) & (thermal_fts_keep > 0)]
 
+        del overlap_masks
+
         thermal_masks_keep = thermal_masks.where(thermal_masks.isin(thermal_fts_keep), 0)
+
+        output_features[experiment_name]['thermal_features'] = thermal_fts[thermal_fts.feature.isin(thermal_fts_keep)]   
 
         del thermal_masks
 
@@ -142,7 +149,10 @@ def run_segmentation_timestep(filepath: Path, trackspath: Path, maskspath: Path,
 
         masks.to_netcdf(Path(maskspath, 
                              f'masks-{experiment_name}', f"{time.strftime('%Y-%m-%d-%H%M%S')}.h5"),
-                             engine='h5netcdf')
+                             engine='h5netcdf',
+                             encoding={"cloud_mask": {"zlib": True, "complevel": 9},
+                                       "thermal_mask": {"zlib": True, "complevel": 9},
+                                       "updraft_mask": {"zlib": True, "complevel": 9}},)
         
         del cloud_masks,thermal_masks_keep,updraft_masks,masks
 

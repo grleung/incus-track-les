@@ -32,7 +32,7 @@ for i, dmax in enumerate([100,200,400,600,800,1000,1200,1400,1600,1800,2000]):
 if __name__ == '__main__':
     client = init_slurm_downdraft(jobs=batch_size, job_name=test_name,memory='5GB')
 
-    for domain in ['ARG1.1','WPO1.1']:
+    for domain in ['ARG1.1','WPO1.1','BRA2.1']:
         for model in ['R','WM','WT']:
             run = f"{domain}-{model}-V1"
             print(f"Starting run: {run}")

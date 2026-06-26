@@ -8,30 +8,30 @@ from incus_track_les.utils import init_slurm_downdraft, save_segmentation_output
 batch_size = 10
 
 # initialize experiments for this test
-test_name = 'test04-cldthresh'
+test_name = 'test05-seedbox'
 tracks_version = ('test03-dmax','v04') # pick threshold version from test03 to use
 
 grid_level = 3
 
 parameter_experiments = {}
 
-for i, thresh in enumerate([1e-3,1e-4,1e-5]):
+for i, box in enumerate([3,5,7]):
     experiment_name = f"v{str(i).zfill(2)}"
 
-    params = {"cloud_threshold": thresh,
+    params = {"cloud_threshold": 1e-4,
               "thermal_segmentation_params": {
                   'method': 'watershed',
                   'threshold': 2, # m/s, lowest vertical velocity threshold
                   'seed_3D_flag': 'box',
                   'vertical_coord': 'altitude_stag',
-                  'seed_3D_size': (5,5,5),
+                  'seed_3D_size': (box,5,5),
               }
               }
 
     parameter_experiments[experiment_name] = params
 
 if __name__ == '__main__':
-    client = init_slurm_downdraft(jobs=batch_size, job_name=test_name, memory='100GB')
+    client = init_slurm_downdraft(jobs=batch_size, job_name=test_name, memory='80GB')
 
     for domain in ['ARG1.1','WPO1.1']:
         for model in ['R','WM','WT']:
@@ -53,7 +53,7 @@ if __name__ == '__main__':
             if run_parameters:
                 filepaths = get_filepaths(Path(MODEL_DATA_DIR,run),
                                           grid_level=grid_level)
-                filepaths = filepaths[60:70] # subset 15 min period to save computation
+                filepaths = filepaths[60:70] # subset 5 min period to save computation
 
                 print(f"Processing {len(filepaths)} files")
 

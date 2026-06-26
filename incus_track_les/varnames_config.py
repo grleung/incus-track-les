@@ -26,7 +26,9 @@ VAR_MAPPINGS = {
     'WRF': {
         'vertical_velocity': 'W', 
         'zonal_velocity': 'U',
-        'meridional_velocity': 'V'
+        'meridional_velocity': 'V',
+        'cloud_condensate':(['QCLOUD','QICE','QSNOW'], lambda ds: ds['QCLOUD'] + ds['QICE'] + ds['QSNOW']),
+        'total_condensate':(['QCLOUD','QRAIN','QICE','QSNOW','QGRAUP'], lambda ds: ds['QCLOUD'] + ds['QRAIN'] +  ds['QICE'] + ds['QSNOW'] + ds['QGRAUP']),
     }
 }
 
