@@ -7,4 +7,4 @@
 #SBATCH --mem=4G
 #SBATCH --time=48:00:00
 
-pixi run --frozen python feature-detection-test01-minthresh.py
+pixi run --frozen python test01-minthresh-feature-detection.py

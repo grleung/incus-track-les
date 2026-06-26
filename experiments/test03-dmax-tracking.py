@@ -1,6 +1,5 @@
 'This script tests the d_max for tracking.'
 
-import os
 from pathlib import Path
 from incus_track_les import run_tracking
 from incus_track_les.utils import init_slurm_downdraft,save_track_output
@@ -9,7 +8,7 @@ batch_size = 11
 
 # initialize experiments for this test
 test_name = 'test03-dmax'
-threshold_version = 'v04' # pick threshold version from test02 to use
+feature_version = ('test02-numthresh','v04') # pick threshold version from test02 to use
 grid_level = 3
 
 parameter_experiments = {}
@@ -41,15 +40,13 @@ if __name__ == '__main__':
             experiment_dir = Path(f'/tempest/gleung/incus-les-track-tests/{test_name}/{run}')
             experiment_dir.mkdir(parents=True,exist_ok=True)
 
-            features_path = Path(f'/tempest/gleung/incus-les-track-tests/test02-numthresh/{run}/features_{threshold_version}.pq')
+            features_path = Path(f'/tempest/gleung/incus-les-track-tests/{feature_version[0]}/{run}/features_{feature_version[1]}.pq')
 
             # Check which experiments are missing for this run
             run_parameters = {
                 experiment_name: experiment_params
                 for experiment_name, experiment_params in parameter_experiments.items()
-                if not os.path.exists(
-                    Path(experiment_dir, f"tracks_{experiment_name}.pq")
-                )
+                if not Path(experiment_dir, f"tracks_{experiment_name}.pq").exists()
             }
 
             if run_parameters:
