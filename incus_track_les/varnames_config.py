@@ -16,10 +16,12 @@ DIM_MAPPINGS = {
 }
 
 VAR_MAPPINGS = {
-    'RAMS': {
+    'RAMS': { # TODO: Considering unstaggering vertical velocity from the very beginning so it's easier to compare with condensate down the line
         'vertical_velocity': 'WP', #note: in RAMS, WP is the vertical velocity at this timestep (WC says "current" in docs but this is actually the unfiltered future value for next time step initial conditions; see the Subroutine predict for details)
         'zonal_velocity': 'UP',
-        'meridional_velocity': 'VP'
+        'meridional_velocity': 'VP',
+        'cloud_condensate':(['RCP','RSP','RPP'], lambda ds: ds['RCP'] + ds['RSP'] + ds['RPP']),
+        'total_condensate':(['RCP','RDP','RPP','RGP','RAP','RHP', 'RSP','RPP'], lambda ds: ds['RCP'] +ds['RDP'] + ds['RPP'] +ds['RGP'] + ds['RAP'] + ds['RHP'] + ds['RSP'] + ds['RPP']), 
     },
     'WRF': {
         'vertical_velocity': 'W', 

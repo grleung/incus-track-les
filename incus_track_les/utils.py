@@ -5,6 +5,15 @@ from dask.distributed import Client
 import sys
 from pathlib import Path
 import pandas as pd
+import tobac
+
+import dask
+
+dask.config.set({
+    "distributed.comm.timeouts.connect": "90s",
+    "distributed.comm.timeouts.tcp": "90s",
+    "distributed.worker.heartbeat": "30s"
+})
 
 import hdf5plugin
 plugin_path = hdf5plugin.PLUGIN_PATH
@@ -99,3 +108,38 @@ def save_track_output(data: list[pd.DataFrame] | pd.DataFrame, save_dir: Path, e
         return
 
     data.to_parquet(outpath)
+
+def save_segmentation_output(data: dict[str, list[pd.DataFrame]] | list[pd.DataFrame], save_dir: Path, experiment_name: str | None = None):
+    
+    # If the input is a dictionary, then we are doing a parameter experiment and need to recurse over individual save files
+    if isinstance(data, dict):
+        for exp_name, list_of_dicts in data.items():
+            for name in ['cloud_families','thermal_features','updraft_families']:
+                dfs = [d[name] for d in list_of_dicts if name in d]
+                save_segmentation_output(dfs, 
+                                  save_dir=save_dir, 
+                                  experiment_name=f"{name}_{exp_name}")
+        return
+
+    # If the input is just a list of dataframes, then we can go ahead and save!
+    filename = experiment_name if experiment_name else ""
+    outpath = Path(save_dir, f"{filename}.pq")
+    outpath.parent.mkdir(parents=True,exist_ok=True)
+
+    if outpath.exists():
+        return
+
+    # filter out any empty dataframes
+    data = [df for df in data if not df.empty]
+    
+    if not data:
+        return # nothing to save!
+    
+    # make sure features are ordered by time
+    sorted_features = sorted(data, key=lambda df: df['time'].iloc[0] if not df.empty else 0)
+
+    # combine dataframes with tobac utils
+    all_features = tobac.utils.combine_feature_dataframes(sorted_features, renumber_features=False)
+
+    # save to parquet
+    all_features.to_parquet(outpath)

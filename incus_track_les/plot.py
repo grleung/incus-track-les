@@ -113,8 +113,7 @@ def plot_cell_traj_ax(ax, run_path, experiment_params, experiment_label, **kwarg
                                  experiment_params)):
         tracks = pd.read_parquet(trks)
 
-        tracks['frac_lifetime'] = (tracks['time_cell']/(tracks['lifetime']*dt.timedelta(minutes=1)))
-
+    
         xs = np.linspace(0,1,21)
 
         out = []

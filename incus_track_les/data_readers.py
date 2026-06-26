@@ -5,11 +5,12 @@ from pathlib import Path
 from typing import List, Union
 import numpy as np
 import xarray as xr
+import gc
 
 from incus_track_les.paths import find_model_metadata
 from incus_track_les.varnames_config import DIM_MAPPINGS, VAR_MAPPINGS, DIMS, GRID_SPACING_MAPPINGS
 
-def get_filepaths(directory: Path,grid_level: int=3) -> List[Path]:
+def get_filepaths(directory: Path,grid_level: int=3) -> list[Path]:
     """Returns a sorted list of filepaths for a given run directory. Detects whether the simulation is RAMS or WRF. 
 
     Args:
@@ -137,14 +138,14 @@ def read_rams_coords(path:Path) -> dict:
 
     return(coords)
 
-def read_rams_data(path:Path, variables:list[str])->Union[xr.Dataset,xr.DataArray]:
+def read_rams_data(path:Path, variables:list[str])->xr.Dataset | xr.DataArray:
     """Read RAMS data into a standard format that can be read by tobac
 
     Args:
         path (Path): full path to file
         variables (list[str], optional): list of variables to return, see: RAMS documentation for variables available.
     Returns:
-        Union[xr.Dataset,xr.DataArray]: dataset or dataarray with RAMS data
+        [xr.Dataset,xr.DataArray]: dataset or dataarray with RAMS data
     """
 
     meta = find_model_metadata(path)    
@@ -323,8 +324,16 @@ def read_data(filepath: Path, coords: Union[xr.Dataset,xr.DataArray], variables:
     meta = find_model_metadata(filepath)
     model = meta['model_type']
 
-    vars = VAR_MAPPINGS[model]
-    variables_model_name = [vars.get(v,v) for v in variables] # list of requested variables with model-specific naming conventions
+    var_map = VAR_MAPPINGS[model]
+
+    # pull out the variables needed in model naming convention
+    variables_model_name = []
+
+    for v in variables:
+        if isinstance(var_map[v],tuple):
+            variables_model_name.extend(var_map[v][0])
+        else:
+            variables_model_name.append(var_map[v])
 
     if model == 'RAMS':
         ds = read_rams_data(filepath, variables=variables_model_name)
@@ -335,19 +344,21 @@ def read_data(filepath: Path, coords: Union[xr.Dataset,xr.DataArray], variables:
 
     # assign coordinates
     ds = ds.assign_coords(coords)
+
+    for v in variables:
+        if isinstance(var_map[v],tuple):
+            input_vars, formula = var_map[v]
+
+            ds[v] = formula(ds)
+        else:
+            ds[v] = ds[var_map[v]]
+
+    vars_to_drop = [v for v in ds.data_vars if v not in variables]
     
-    # rename the RAMS/WRF internal variable names to unified descriptive names
-    rename_target = {
-        vars[v]: v 
-        for v in variables 
-        if v in vars
-    }
-    # whether file is RAMS or WRF, return the same variable names
-    if isinstance(ds, xr.Dataset):
-        ds = ds.rename(rename_target)
-    elif isinstance(ds, xr.DataArray):
-        if ds.name in rename_target:
-            ds = ds.rename(rename_target[ds.name])
+    if vars_to_drop:
+        ds = ds.drop_vars(vars_to_drop)
+        
+        gc.collect()
 
     # if only one variable, just return the dataarray
     if len(variables)==1:
