@@ -41,7 +41,7 @@ def apply_custom_style():
 def plot_metric_fig(run_paths, experiment_params, experiment_label, metric='valid_features', **kwargs):
     apply_custom_style()
 
-    fig, axes = plt.subplots(2,3,figsize=(10,6),sharex=True)
+    fig, axes = plt.subplots(len(run_paths)//3,3,figsize=(10,3*len(run_paths)//3),sharex=True)
     axes = axes.flatten()
 
     for ax, run in zip(axes, run_paths):

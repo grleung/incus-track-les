@@ -45,6 +45,7 @@ if __name__ == '__main__':
             run = f"{domain}-{model}-V1"
             print(f"Starting run: {run}")
             experiment_dir = Path(f'/tempest/gleung/incus-les-track-tests/{test_name}/{run}')
+            experiment_dir.mkdir(exist_ok=True,parents=True)
 
             # Check which experiments are missing for this run
             run_parameters = {

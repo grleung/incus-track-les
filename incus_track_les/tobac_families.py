@@ -1117,7 +1117,10 @@ def identify_feature_families_from_data(
 
         #print(family_labeled_data.shape)
 
+        #TODO BEE: instead of extracting the specific updraft center point here, should check for an overlap with an input mask (from W watershedding) that I give 
+        # then assign each W feature a family (cloud) ID based on which cloud region the W region intersects with the most. 
         family_ids = family_labeled_data[points_list]
+
           
         # remove 0 (background) if needed
         family_ids_sorted = np.unique(family_ids[family_ids > 0])

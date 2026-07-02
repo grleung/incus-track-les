@@ -33,7 +33,7 @@ for i, thresh in enumerate([1e-3,1e-4,1e-5]):
 if __name__ == '__main__':
     client = init_slurm_downdraft(jobs=batch_size, job_name=test_name, memory='100GB')
 
-    for domain in ['ARG1.1','WPO1.1']:
+    for domain in ['BRA2.1']:
         for model in ['R','WM','WT']:
             run = f"{domain}-{model}-V1"
             print(f"Starting run: {run}")
