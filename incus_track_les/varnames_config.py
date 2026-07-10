@@ -1,3 +1,7 @@
+cp = 1004  # specific heat at constant pressure [J/kg/K]
+rgas_dry = 287  # dry gas constant [J/kg/K]
+p00 = 100000  # reference pressure [Pa]
+
 
 DIM_MAPPINGS = {
     "RAMS": {
@@ -20,15 +24,19 @@ VAR_MAPPINGS = {
         'vertical_velocity': 'WP', #note: in RAMS, WP is the vertical velocity at this timestep (WC says "current" in docs but this is actually the unfiltered future value for next time step initial conditions; see the Subroutine predict for details)
         'zonal_velocity': 'UP',
         'meridional_velocity': 'VP',
+        'pressure': ('PI', lambda ds: (p00) * (ds['PI']/cp)**(cp/rgas_dry)),
+        'temperature': (['THETA','PI'], lambda ds: (ds['THETA']*(ds['PI']/cp))),
+        'density': (['PI','THETA','RV'], lambda ds: (p00) * (ds['PI']/cp)**(cp/rgas_dry) / (rgas_dry * (ds['THETA']*(ds['PI']/cp)) * (1+ (0.61*ds['RV'])))),
         'cloud_condensate':(['RCP','RSP','RPP'], lambda ds: ds['RCP'] + ds['RSP'] + ds['RPP']),
-        'total_condensate':(['RCP','RDP','RPP','RGP','RAP','RHP', 'RSP','RPP'], lambda ds: ds['RCP'] +ds['RDP'] + ds['RPP'] +ds['RGP'] + ds['RAP'] + ds['RHP'] + ds['RSP'] + ds['RPP']), 
     },
     'WRF': {
         'vertical_velocity': 'W', 
         'zonal_velocity': 'U',
         'meridional_velocity': 'V',
-        'cloud_condensate':(['QCLOUD','QICE','QSNOW'], lambda ds: ds['QCLOUD'] + ds['QICE'] + ds['QSNOW']),
-        'total_condensate':(['QCLOUD','QRAIN','QICE','QSNOW','QGRAUP'], lambda ds: ds['QCLOUD'] + ds['QRAIN'] +  ds['QICE'] + ds['QSNOW'] + ds['QGRAUP']),
+        'pressure': (['PB','P'], lambda ds: ds['PB'] + ds['P']), # pressure in pascals
+        'temperature': (['PB','P','T','T00'],lambda ds: (ds['T']+ds['T00']) * ((ds['PB']+ds['P'])/p00)**(rgas_dry/cp)), # temp in kelvin
+        'density':(['PB','P','T00','T','QVAPOR'], lambda ds :  (ds['PB'] + ds['P'])/(rgas_dry * ((ds['T']+ds['T00']) * ((ds['PB']+ds['P'])/p00)**(rgas_dry/cp)) * (1 + (0.61* ds['QVAPOR'])) )),
+        'cloud_condensate':(['QCLOUD','QICE','QSNOW'], lambda ds: ds['QCLOUD'] + ds['QICE']),# + ds['QSNOW']),
     }
 }
 

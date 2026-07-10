@@ -1194,7 +1194,7 @@ def identify_feature_families_from_data(
 
 def combine_feature_families(
     in_feature_dfs: list[pd.DataFrame],
-    in_stats: list[pd.DataFrame],
+    in_stats: list[pd.DataFrame] = None,
     in_grid: list[xr.DataArray] = None,
     renumber_features: bool = False,
     old_feature_column_name=None,
@@ -1250,6 +1250,11 @@ def combine_feature_families(
 
     """
 
+
+
+    if in_stats is None:    
+        enable_family_statistics = False
+
     if in_grid is not None:
         raise NotImplementedError("Merging of grids is not yet supported")
 
@@ -1263,15 +1268,16 @@ def combine_feature_families(
     # get time: frame mapping
     time_frame_map = combined_feature_df.groupby("time")["frame"].max().to_dict()
 
-    # now need to combine the stats dataframes
-    combined_stats_df = pd.concat(in_stats)
-    try:
-        combined_stats_df["frame"] = [
-            time_frame_map[x] for x in combined_stats_df["time"]
-        ]
-    except KeyError as e:
-        return time_frame_map
-    # print(combined_stats_df)
+    if enable_family_statistics:
+        # now need to combine the stats dataframes
+        combined_stats_df = pd.concat(in_stats)
+        try:
+            combined_stats_df["frame"] = [
+                time_frame_map[x] for x in combined_stats_df["time"]
+            ]
+        except KeyError as e:
+            return time_frame_map
+        # print(combined_stats_df)
 
     if not renumber_families and np.any(
         np.bincount(
@@ -1287,26 +1293,31 @@ def combine_feature_families(
             "keyword to define a new column for these values in the returned dataframe"
         )
 
-    combined_stats_df = combined_stats_df.reset_index().set_index(
-        "feature_family_id", drop=False
-    )
+    
+    if enable_family_statistics:
+        combined_stats_df = combined_stats_df.reset_index().set_index(
+            "feature_family_id", drop=False
+        )
 
     if old_family_column_name is not None:
         combined_feature_df[old_family_column_name] = copy.deepcopy(
             combined_feature_df[family_column_name]
         )
-        combined_stats_df[old_family_column_name] = copy.deepcopy(
-            combined_stats_df[family_column_name]
-        )
+        if enable_family_statistics:
+            combined_stats_df[old_family_column_name] = copy.deepcopy(
+                combined_stats_df[family_column_name]
+            )
 
     new_family_numbers = np.empty(
         len(combined_feature_df[family_column_name]),
         dtype=combined_feature_df[family_column_name].dtype,
     )
-    new_family_numbers_stats = np.empty(
-        len(combined_stats_df[family_column_name]),
-        dtype=combined_stats_df[family_column_name].dtype,
-    )
+    
+    if enable_family_statistics:
+        new_family_numbers_stats = np.empty(
+            len(combined_stats_df[family_column_name]),
+            dtype=combined_stats_df[family_column_name].dtype,
+        )
     family_number_map = dict()
     # let's start with the first frame's minimum number.
     min_family_num = combined_feature_df[
@@ -1325,22 +1336,31 @@ def combine_feature_families(
     #     curr_fam_pair = (row['frame'], row[family_column_name])
     #     new_family_numbers_stats[i] = family_number_map[curr_fam_pair]
 
-    for i, (index, row) in enumerate(combined_stats_df.iterrows()):
-        curr_fam_pair = (row["frame"], row[family_column_name])
-        if curr_fam_pair in family_number_map:
-            new_family_numbers_stats[i] = family_number_map[curr_fam_pair]
-        else:
-            print(f"Warning: family {curr_fam_pair} in stats not found in feature map")
-            new_family_numbers_stats[i] = -1  # or np.nan if preferred
+    
+    if enable_family_statistics:
+        for i, (index, row) in enumerate(combined_stats_df.iterrows()):
+            curr_fam_pair = (row["frame"], row[family_column_name])
+            if curr_fam_pair in family_number_map:
+                new_family_numbers_stats[i] = family_number_map[curr_fam_pair]
+            else:
+                print(f"Warning: family {curr_fam_pair} in stats not found in feature map")
+                new_family_numbers_stats[i] = -1  # or np.nan if preferred
 
     combined_feature_df[family_column_name] = new_family_numbers
-    combined_stats_df[family_column_name] = new_family_numbers_stats
+    
+    
+    if enable_family_statistics:
+        combined_stats_df[family_column_name] = new_family_numbers_stats
 
-    combined_stats_df = combined_stats_df.reset_index(drop=True).set_index(
-        family_column_name, drop=False
-    )
-    return combined_feature_df, combined_stats_df
-
+        combined_stats_df = combined_stats_df.reset_index(drop=True).set_index(
+            family_column_name, drop=False
+        )
+   
+   
+    if enable_family_statistics:
+        return combined_feature_df, combined_stats_df
+    else:
+        return combined_feature_df
 
 def track_feature_families(
     in_feat_arr: pd.DataFrame,
@@ -1813,3 +1833,221 @@ def reassign_grid_coords_to_family(
     return_grid = return_grid.rename("tracked_family_id")
 
     return return_grid
+
+def identify_feature_families_from_data_with_mask(
+    feature_df: pd.DataFrame,
+    feature_mask: xr.DataArray,
+    in_data: xr.DataArray,
+    threshold: float,
+    return_grid: bool = False,
+    family_column_name: str = "feature_family_id",
+    time_padding: Optional[datetime.timedelta] = datetime.timedelta(seconds=0.5),
+    PBC_flag: Literal["none", "hdim_1", "hdim_2", "both"] = "none",
+    target: Literal["minimum", "maximum", "bool"] = "maximum",
+    unlinked_family_id: Union[int, None] = -1,
+    min_overlap_count: Union[int, None] = 64,
+):
+    """
+    Function to identify families/storm systems by identifying where segmentation of in_data intersects at any point with an existing watershed mask.
+    At a given time, segmentation areas are considered part of the same family if they
+    touch at any point.
+
+    Parameters
+    ----------
+    feature_df: pd.DataFrame
+        Input feature dataframe
+    feature_mask: xr.DataArray
+        Input feature mask. Should match the data that feature_df was generated from.
+    in_data: xr.DataArray
+        Input data. Should match the data that feature_df was generated from.
+    threshold: float
+        Threshold to define your feature family at
+    return_grid: bool
+        Whether to return the segmentation grid showing families
+    family_column_name: str
+        The name in the output dataframe of the family ID
+    time_padding: datetime.timedelta
+        Time padding to find the matching time between the feature_df and the in_data.
+        By default, this is a half second to deal with random errors around time data type
+        conversions.
+    PBC_flag: {"none", "hdim_1", "hdim_2", "both"}
+        What axes to do periodic boundaries on
+    target: {"minimum", "maximum", "bool"}
+        Whether we are looking for things ascending ("maximum") or descending ("minimum").
+        There is the special case where you already have a true/false array, then you can put
+        "bool" as the output.
+    unlinked_family_id: int or None
+        The value to have in the dataframe for any feature that cannot be linked to a family.
+        This is unusual (as every feature should link to a family), but this can happen
+        if e.g., the feature position is located outside of the feature area above the threshold.
+        If "None", these features are dropped from the output.
+    min_overlap_count: int or None
+        The minimum number of overlap points needed between input feature mask and mask from data
+
+    Returns
+    -------
+    pd.DataFrame and xr.DataArray or pd.DataFrame
+        Input dataframe with family IDs associated with each feature
+        if return_grid is True, the segmentation grid showing families is
+        also returned.
+
+    """
+
+    # we need to label the data, but we currently label using skimage label, not dask label.
+
+    time_var_name = "time"
+
+    # 3D should be 4-D (time, then 3 spatial).
+    # 2D should be 3-D (time, then 2 spatial)
+    is_3D = len(in_data.shape) == 4
+
+    seg_family_dict = dict()
+    seg_overlap_count_dict = dict()
+    out_families = copy.deepcopy(in_data)
+    out_families = out_families.astype(np.int64)
+    out_families.name = "family_grid"
+    max_family_number = 0
+    enable_family_statistics = False
+
+    if enable_family_statistics:
+        region_props_vals = ["bbox", "centroid", "num_pixels"]
+        family_stats = dict()
+    for time_index in range(in_data.shape[0]):
+        # TODO: fix time_var_name for isel?
+        # print("time_index: ", time_index)
+        in_data_at_time = in_data.isel(time=time_index)
+        in_arr = np.array(in_data_at_time)
+
+        # These are our families
+        if target == "minimum":
+            mask = in_arr < threshold
+        elif target == "maximum":
+            mask = in_arr > threshold
+        elif target == "bool":
+            mask = in_arr
+        else:
+            raise ValueError("target must be minimum, maximum, or bool")
+        family_labeled_data, number_families = label_with_pbcs(
+            mask, PBC_flag=PBC_flag, connectivity=1
+        )
+        if not is_3D:
+            family_labeled_data = family_labeled_data[0]
+        
+
+        # need to associate family ID with each feature ID
+
+        # get rows at current time
+
+        rows_at_time = find_df_rows_at_time(
+            feature_df,
+            in_data_at_time["time"].values,
+            time_var_name=time_var_name,
+            time_padding=time_padding,
+        )
+        rows_at_time = rows_at_time.copy()
+
+        #print(family_labeled_data.shape)
+
+        # instead of extracting the specific updraft center point here, should check for an overlap with an input mask (from watershedding) 
+        # then assign each feature a family ID based on which region the W region intersects with the most. 
+
+        feature_mask_at_time = feature_mask.isel(time=time_index).values
+
+        # find overlap of the family mask and original feature mask
+        overlap_mask = (family_labeled_data>0) & (feature_mask_at_time>0)
+
+        # get corresponding family and feature IDs for overlap points
+        family_ids = family_labeled_data[overlap_mask]
+        feature_ids =feature_mask_at_time[overlap_mask]
+
+        # for each overlap point in space, assign the feature ID with associated family ID
+        overlap_feature_family_ids = np.column_stack((feature_ids, family_ids))
+        overlap_feature_family_ids, counts = np.unique(overlap_feature_family_ids, axis=0, return_counts=True)
+
+        feature_id_family_id_match_ct = {}
+        feature_id_overlap_count = {}
+        max_counts = {}
+
+
+        # for each feature ID, find which family ID has the largest overlapping region
+        # and assign the feature ID to that family ID
+        for (feat_id, fam_id), count in zip(overlap_feature_family_ids, counts):
+            if (count > max_counts.get(feat_id,0)) & (count > min_overlap_count):
+
+                max_counts[feat_id] = count
+                feature_id_family_id_match_ct[feat_id] = fam_id+max_family_number
+                feature_id_overlap_count[feat_id] = count
+
+        seg_family_dict.update(feature_id_family_id_match_ct)
+        seg_overlap_count_dict.update(feature_id_overlap_count)
+
+        out_families[time_index] = (
+            family_labeled_data + max_family_number
+        )
+
+        max_family_number = out_families.max().values
+
+    family_series = pd.Series(seg_family_dict, name=family_column_name)
+    feature_series = pd.Series({x: x for x in seg_family_dict.keys()}, name="feature")
+
+    overlap_count_series = pd.Series(seg_overlap_count_dict, name=f"{family_column_name}_ncells_overlap")
+    
+    family_df = pd.concat([family_series, feature_series, overlap_count_series], axis=1)
+
+    # note: as written, this currently drops any features that do not have overlap with any families
+    out_df = feature_df.merge(family_df, on="feature", how="inner")
+
+    if unlinked_family_id is not None:
+        out_df.loc[out_df[family_column_name] == 0, family_column_name] = -1
+    else:
+        out_df = out_df[
+            np.logical_and(
+                out_df[family_column_name] != 0, out_df[family_column_name] != -1
+            )
+        ]
+
+    if return_grid:
+        if enable_family_statistics:
+            return out_df, family_stats_df, out_families
+        else:
+            return out_df, out_families
+
+    else:
+        if enable_family_statistics:
+            return out_df, family_stats_df
+        else:
+            return out_df
+
+
+def renumber_feature_family_masks(in_feature_dfs, in_masks, 
+    old_family_column_name: str = "feature_family_id_original",
+    family_column_name: str = "feature_family_id",):
+    """
+    Function to renumber feature family masks to have unique feature family IDs across timesteps. 
+
+    Parameters
+    ----------
+    in_feature_dfs: list[pd.DataFrame]
+        List of dataframes generated by `identify_feature_families` then renumbered across times using `combine_feature_families`
+    in_grid: list[xr.DataArray], optional
+        List of DataArrays of the grids output by `identify_feature_families`.
+    old_family_column_name: str or None, optional (default: "feature_family_id_original")
+        The column name of old family numbers (corresponding to input mask)
+    family_column_name: str
+        The name in the output dataframe of the family ID
+    """
+
+    # build a lookup mapping between the old_id and new_id, where id_map[old_id] = new_id
+    old_ids = in_feature_dfs[old_family_column_name].values.astype(int)
+    new_ids = in_feature_dfs[family_column_name].values.astype(int)
+
+    id_map = np.zeros(old_ids.max() +1, dtype=int)
+    id_map[old_ids] = new_ids
+
+    out_masks = xr.apply_ufunc(
+        lambda arr: id_map[arr],
+        in_masks,
+        dask="allowed",
+        vectorize=False
+    )
+    return out_masks

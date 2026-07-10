@@ -387,3 +387,38 @@ def subset_data(ds: xr.DataArray, nbound:int = 25) -> xr.DataArray:
 
 def find_dxy_from_grid_level(grid_level):
     return(GRID_SPACING_MAPPINGS.get(grid_level))
+
+def interpolate_w(data, model_type,drop_others=False):
+    from xgcm import Grid
+
+    is_dataarray = isinstance(data, xr.DataArray)
+    if is_dataarray:
+        data = data.to_dataset(name='vertical_velocity')
+
+    if model_type=='RAMS':
+        grid = Grid(data,
+            coords={'z': {'center':'z','right':'z_stag'}}, 
+            periodic=False,
+            autoparse_metadata=False)
+    elif model_type=='WRF':
+        grid = Grid(data,
+            coords={'z': {'center':'z','outer':'z_stag'}}, 
+            periodic=False,
+            autoparse_metadata=False)
+
+    w_unstaggered = grid.interp(data.vertical_velocity, axis='z', boundary='extend')
+
+    data['vertical_velocity'] = w_unstaggered
+
+    if model_type=='RAMS':
+        # remove the ghost point below surface
+        data = data.isel(z=slice(1,None))
+
+    dims_to_drop = {'x_stag', 'y_stag', 'z_stag'} & set(data.dims)
+    if dims_to_drop:
+        data = data.drop_dims(dims_to_drop)
+        
+    if drop_others:
+        data = data['vertical_velocity']
+
+    return(data)

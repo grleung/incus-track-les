@@ -42,4 +42,11 @@ def find_model_metadata(path: Path) -> dict:
                 'time':pd.to_datetime(filename[11:],format='%Y-%m-%d_%H_%M_%S')})
     else:
         raise ValueError(f"Unknown model type for run name: {run_name}.")
-    
+
+def find_file_path_from_time(parent_dir, time, grid_level=3):
+    run_name = find_run_name_from_file_path(parent_dir)
+
+    if '-R-' in run_name:
+        return(Path(parent_dir, f"G3/out_30s/a-L-{time.strftime('%Y-%m-%d-%H%M%S')}-g{grid_level}.h5"))
+    elif ('-WM-' in run_name) or ('-WT-' in run_name):
+        return(Path(parent_dir, f"G3/wrfout_d{str(grid_level).zfill(2)}_{time.strftime('%Y-%m-%d_%H_%M_%S')}"))
