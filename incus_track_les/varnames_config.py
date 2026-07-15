@@ -28,6 +28,7 @@ VAR_MAPPINGS = {
         'temperature': (['THETA','PI'], lambda ds: (ds['THETA']*(ds['PI']/cp))),
         'density': (['PI','THETA','RV'], lambda ds: (p00) * (ds['PI']/cp)**(cp/rgas_dry) / (rgas_dry * (ds['THETA']*(ds['PI']/cp)) * (1+ (0.61*ds['RV'])))),
         'cloud_condensate':(['RCP','RSP','RPP'], lambda ds: ds['RCP'] + ds['RSP'] + ds['RPP']),
+        'total_condensate':(['RCP','RSP','RPP','RRP','RDP','RAP','RHP','RGP',], lambda ds: ds['RCP'] + ds['RSP'] + ds['RPP']+ds['RRP'] + ds['RDP'] + ds['RAP'] + ds['RHP'] + ds['RGP']),
     },
     'WRF': {
         'vertical_velocity': 'W', 
@@ -36,7 +37,8 @@ VAR_MAPPINGS = {
         'pressure': (['PB','P'], lambda ds: ds['PB'] + ds['P']), # pressure in pascals
         'temperature': (['PB','P','T','T00'],lambda ds: (ds['T']+ds['T00']) * ((ds['PB']+ds['P'])/p00)**(rgas_dry/cp)), # temp in kelvin
         'density':(['PB','P','T00','T','QVAPOR'], lambda ds :  (ds['PB'] + ds['P'])/(rgas_dry * ((ds['T']+ds['T00']) * ((ds['PB']+ds['P'])/p00)**(rgas_dry/cp)) * (1 + (0.61* ds['QVAPOR'])) )),
-        'cloud_condensate':(['QCLOUD','QICE','QSNOW'], lambda ds: ds['QCLOUD'] + ds['QICE']),# + ds['QSNOW']),
+        'cloud_condensate':(['QCLOUD','QICE'], lambda ds: ds['QCLOUD'] + ds['QICE']),# + ds['QSNOW']),
+        'total_condensate':(['QCLOUD','QICE','QSNOW','QRAIN','QGRAUP'], lambda ds: ds['QCLOUD'] + ds['QICE'] + ds['QSNOW']+ds['QRAIN']+ds['QGRAUP']),
     }
 }
 

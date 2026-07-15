@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 import tobac
 import incus_track_les.tobac_families as tobac_fam
+from incus_track_les import find_model_metadata
 
 import dask
 
@@ -146,8 +147,6 @@ def old_save_segmentation_output(data: dict[str, list[pd.DataFrame]] | list[pd.D
     all_features.to_parquet(outpath)
 
 def save_segmentation_output(data: dict[str, list[pd.DataFrame]] | list[pd.DataFrame], save_dir: Path, experiment_name: str | None = None):
-    import xarray as xr
-    
     # If the input is a dictionary, then we are doing a parameter experiment and need to recurse over individual save files
     if isinstance(data, dict):
         for exp_name, list_of_dicts in data.items():
@@ -182,34 +181,46 @@ def save_segmentation_output(data: dict[str, list[pd.DataFrame]] | list[pd.DataF
                                             family_column_name='updraft_feature_id')
     
     #tobac.utils.combine_feature_dataframes(sorted_features, renumber_features=False)
+    all_features.to_parquet(outpath)
+
     
-    mask_dir = f"masks-{experiment_name}" if experiment_name else "masks"
+def save_segmentation_masks(filepath: Path, save_dir: Path, experiment_name: str | None = None):
+    import xarray as xr
+    import numpy as np
+
+    # If the input is just a list of dataframes, then we can go ahead and save!
+    filename = f"_{experiment_name}" if experiment_name else ""
+    segmentation_path = Path(save_dir, f"segmentation{filename}.pq")
+
+    # read in segmentation output
+    all_features = pd.read_parquet(segmentation_path)
+
+    mask_dir = f"masks{filename}"
     mask_dir = Path(save_dir, mask_dir)
 
-    #rewrite the mask with updated numbering per timestep
-    for time in all_features.time.unique():
-        features_at_time = all_features[all_features.time==time]
+    time = find_model_metadata(filepath)['time']
 
-        with xr.open_dataset(mask_dir/f"{time.strftime('%Y-%m-%d-%H%M%S')}.h5") as masks:
-            masks.load()
+    features_at_time = all_features[all_features.time==time]
 
-            masks['cloud_mask'] = tobac_fam.renumber_feature_family_masks(features_at_time,
-                                                    masks.cloud_mask,
-                                                    old_family_column_name="cloud_feature_id_original",
-                                                    family_column_name="cloud_feature_id")
-            masks['updraft_mask'] = tobac_fam.renumber_feature_family_masks(features_at_time,
-                                                    masks.updraft_mask,
-                                                    old_family_column_name="updraft_feature_id_original",
-                                                    family_column_name="updraft_feature_id")
+    with xr.open_dataset(Path(mask_dir,f"{time.strftime('%Y-%m-%d-%H%M%S')}.h5"), engine='h5netcdf') as masks:
+        masks.load()
 
-                                            
-                        
+    cloud_feats = np.unique(masks['cloud_mask'])
+    cloud_feats = cloud_feats[cloud_feats>0]
+
+    if not np.all(sorted(cloud_feats)==sorted(features_at_time.cloud_feature_id)):
+
+        masks['cloud_mask'] = tobac_fam.renumber_feature_family_masks(features_at_time,
+                                                masks.cloud_mask,
+                                                old_family_column_name="cloud_feature_id_original",
+                                                family_column_name="cloud_feature_id")
+        masks['updraft_mask'] = tobac_fam.renumber_feature_family_masks(features_at_time,
+                                                masks.updraft_mask,
+                                                old_family_column_name="updraft_feature_id_original",
+                                                family_column_name="updraft_feature_id")
+                
         masks.to_netcdf(Path(mask_dir, f"{time.strftime('%Y-%m-%d-%H%M%S')}.h5"),
-                                engine='h5netcdf',
-                                encoding={"cloud_mask": {"zlib": True, "complevel": 9},
-                                        "thermal_mask": {"zlib": True, "complevel": 9},
-                                        "updraft_mask": {"zlib": True, "complevel": 9}},)
-
-    # drop the temporary feature IDs and save to parquet
-    all_features.drop(['cloud_feature_id_original','updraft_feature_id_original'],axis=1).to_parquet(outpath)
-
+                        engine='h5netcdf',
+                        encoding={"cloud_mask": {"zlib": True, "complevel": 9},
+                                "thermal_mask": {"zlib": True, "complevel": 9},
+                                "updraft_mask": {"zlib": True, "complevel": 9}},)

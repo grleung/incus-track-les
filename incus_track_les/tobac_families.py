@@ -1364,7 +1364,7 @@ def combine_feature_families(
 
 def track_feature_families(
     in_feat_arr: pd.DataFrame,
-    in_family_stat_arr: pd.DataFrame,
+    #in_family_stat_arr: pd.DataFrame,
     maintain_family_metric: Literal["cells", "area"] = "area",
     feat_family_column_name: str = "feature_family_id",
     cell_column_name: str = "cell",
@@ -1412,7 +1412,7 @@ def track_feature_families(
         ].iloc[0]
 
         # get the relationship between feature family at this time -> cell at this time
-        sets_curr_time = curr_time_feat_arr.groupby("feature_family_id")["cell"].agg(
+        sets_curr_time = curr_time_feat_arr.groupby(feat_family_column_name)["cell"].agg(
             set
         )
 
@@ -1517,22 +1517,6 @@ def track_feature_families(
                             len(common_cells_prev_curr) / len(all_prev_cells)
                             > maintain_track_cell_fraction
                         )
-                    elif maintain_family_metric == "area":
-                        # check if our fraction of area maintained in the current family is > our prescribed fraction
-                        curr_family_area = in_family_stat_arr.at[
-                            curr_family_label, "num_pixels"
-                        ]
-                        prev_family_area = in_family_stat_arr.at[
-                            prev_family_label, "num_pixels"
-                        ]
-                        keep_track_number = (
-                            prev_family_area / curr_family_area
-                        ) > maintain_track_area_fraction and (
-                            curr_family_area / prev_family_area
-                        ) > maintain_track_area_fraction
-                        if keep_track_number:
-                            pass
-
                     else:
                         raise ValueError(
                             "Only acceptable metrics are 'cells' and 'area'."
@@ -1606,28 +1590,6 @@ def track_feature_families(
                             )
                             found_parent_link = True
                             break
-
-                        elif maintain_family_metric == "area":
-                            # check if our fraction of area maintained in the current family is > our prescribed fraction
-                            curr_family_area = in_family_stat_arr.at[
-                                curr_family_label, "num_pixels"
-                            ]
-                            prev_family_area = in_family_stat_arr.at[
-                                parent_cell_label, "num_pixels"
-                            ]
-                            keep_track_number = (
-                                prev_family_area / curr_family_area
-                            ) > maintain_track_area_fraction and (
-                                curr_family_area / prev_family_area
-                            ) > maintain_track_area_fraction
-
-                            if keep_track_number:
-                                if prev_family_area > largest_prev_family_area:
-                                    largest_prev_family_area = prev_family_area
-                                    largest_prev_family_id = (
-                                        family_to_track_relationship[parent_cell_label]
-                                    )
-
                         else:
                             raise ValueError(
                                 "Only acceptable metrics are 'cells' and 'area'."
@@ -1694,7 +1656,7 @@ def track_feature_families(
                             found_parent_link = True
 
                         elif maintain_family_metric == "area":
-                            # check if our fraction of area maintained in the current family is > our prescribed fraction
+                            """# check if our fraction of area maintained in the current family is > our prescribed fraction
 
                             curr_family_area = in_family_stat_arr.at[
                                 curr_family_label, "num_pixels"
@@ -1719,7 +1681,7 @@ def track_feature_families(
                                     largest_prev_family_area = prev_family_area
                                     largest_prev_family_id = (
                                         family_to_track_relationship[parent_cell_label]
-                                    )
+                                    )"""
 
                         else:
                             raise ValueError(
